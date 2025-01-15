@@ -1,17 +1,18 @@
 package ro.pub.cs.systems.eim.practicaltest02v1
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
-import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
-import org.apache.http.client.HttpResponseException
 import org.apache.http.client.methods.HttpGet
 import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.impl.client.HttpClients
@@ -19,9 +20,21 @@ import org.apache.http.util.EntityUtils
 import java.io.IOException
 
 class PracticalTest02v1MainActivity : AppCompatActivity() {
+
     private lateinit var searchInput: EditText
     private lateinit var searchButton: Button
     private lateinit var resultText: TextView
+
+    // Receiver pentru a gestiona broadcast-ul ce actualizează UI-ul
+    private val suggestionsReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == "com.example.broadcast.UPDATE_UI") {
+                val suggestions = intent.getStringExtra("updatedSuggestions")
+                Log.d("BroadcastReceiver", "Sugestii primite: $suggestions")
+                resultText.text = suggestions // Actualizează UI-ul cu sugestiile
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,8 +55,19 @@ class PracticalTest02v1MainActivity : AppCompatActivity() {
                 resultText.text = "Te rugăm să introduci un prefix!"
             }
         }
+
+        // Înregistrăm receiver-ul pentru a asculta broadcast-ul
+        val filter = IntentFilter("com.example.broadcast.UPDATE_UI")
+        LocalBroadcastManager.getInstance(this).registerReceiver(suggestionsReceiver, filter)
     }
-    // Funcție care face cererea HTTP folosind Apache HttpClient
+
+    override fun onPause() {
+        super.onPause()
+        // Asigurăm că dezregistrăm receiver-ul pentru a evita scurgerile de memorie
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(suggestionsReceiver)
+    }
+
+    // Funcție pentru a face cererea HTTP
     private fun searchAutocomplete(prefix: String) {
         val client: CloseableHttpClient = HttpClients.createDefault()
 
@@ -68,28 +92,16 @@ class PracticalTest02v1MainActivity : AppCompatActivity() {
                 // Afișăm sugestiile în LogCat
                 Log.d("GoogleAutocomplete", "Sugestii: $suggestions")
 
-                // Poți vizualiza sugestiile și în TextView
-                runOnUiThread {
-                    resultText.text = suggestions.joinToString(", ")
-                }
+                // Trimitem sugestiile prin broadcast către UI
+                sendSuggestionsBroadcast(suggestions)
+
             } catch (e: IOException) {
-                // În caz de eroare de rețea (nu poate accesa serverul)
                 Log.e("GoogleAutocomplete", "Eroare la cererea HTTP: ${e.message}")
-                e.printStackTrace()  // Detalii complete despre eroare
                 runOnUiThread {
                     resultText.text = "Eroare la obținerea răspunsului. Verifică conexiunea la internet."
                 }
-            } catch (e: HttpResponseException) {
-                // Dacă cererea HTTP returnează un răspuns cu cod de eroare
-                Log.e("GoogleAutocomplete", "Eroare de răspuns HTTP: ${e.message}")
-                e.printStackTrace()  // Detalii complete despre eroare
-                runOnUiThread {
-                    resultText.text = "Eroare la serverul de autocomplete."
-                }
             } catch (e: Exception) {
-                // Capturăm orice altă excepție neprevăzută
                 Log.e("GoogleAutocomplete", "Eroare neașteptată: ${e.message}")
-                e.printStackTrace()  // Detalii complete despre eroare
                 runOnUiThread {
                     resultText.text = "A apărut o eroare neașteptată."
                 }
@@ -100,11 +112,10 @@ class PracticalTest02v1MainActivity : AppCompatActivity() {
     // Funcție pentru a parsa răspunsul JSON
     private fun parseAutocompleteResponse(response: String?): List<String> {
         return try {
-            // Folosim Gson pentru a deserializa răspunsul într-o listă generică (List<Any>)
             val gson = Gson()
             val responseList: List<Any> = gson.fromJson(response, object : TypeToken<List<Any>>() {}.type)
 
-            // Accesăm al doilea element din listă, care conține sugestiile autocomplete
+            // Accesăm al doilea element din listă care conține sugestiile autocomplete
             val suggestions = responseList.getOrNull(1) as? List<String> ?: emptyList()
 
             // Returnăm lista de sugestii
@@ -115,5 +126,13 @@ class PracticalTest02v1MainActivity : AppCompatActivity() {
         }
     }
 
+    // Funcție care trimite broadcast-ul cu sugestiile
+    private fun sendSuggestionsBroadcast(suggestions: List<String>) {
+        val suggestionsString = suggestions.joinToString(",\n") // Convertim lista într-un string, separat prin virgulă și newline
+        Log.d("Broadcast", "Trimitem broadcast cu sugestii: $suggestionsString")  // Verificare log
 
+        val intent = Intent("com.example.broadcast.UPDATE_UI")
+        intent.putExtra("updatedSuggestions", suggestionsString) // Adăugăm sugestiile în extras
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
 }
