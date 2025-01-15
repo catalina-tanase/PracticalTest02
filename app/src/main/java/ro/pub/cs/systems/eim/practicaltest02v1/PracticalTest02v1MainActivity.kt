@@ -9,7 +9,11 @@ import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
+import org.apache.http.client.HttpResponseException
 import org.apache.http.client.methods.HttpGet
+import org.apache.http.impl.client.CloseableHttpClient
 import org.apache.http.impl.client.HttpClients
 import org.apache.http.util.EntityUtils
 import java.io.IOException
@@ -41,31 +45,75 @@ class PracticalTest02v1MainActivity : AppCompatActivity() {
     }
     // Funcție care face cererea HTTP folosind Apache HttpClient
     private fun searchAutocomplete(prefix: String) {
-        val url = "https://www.google.com/complete/search?client=chrome&q=$prefix"
-        val client = HttpClients.createDefault()
-        val request = HttpGet(url)
+        val client: CloseableHttpClient = HttpClients.createDefault()
 
-        // Fă cererea în thread-ul de fundal pentru a nu bloca UI-ul
+        // Construim URL-ul pentru cererea GET
+        val url = "https://www.google.com/complete/search?client=chrome&q=$prefix"
+
+        // Creăm cererea HTTP GET
+        val httpGet = HttpGet(url)
+
+        // Fă cererea într-un thread separat pentru a nu bloca UI-ul
         Thread {
             try {
-                val response = client.execute(request)
-                val entity = response.entity
-                val responseBody = EntityUtils.toString(entity)
+                val response = client.execute(httpGet)
+                val responseBody = EntityUtils.toString(response.entity)
 
                 // Afișează răspunsul complet în LogCat
                 Log.d("GoogleAutocomplete", "Răspuns complet: $responseBody")
 
-                // Poți vizualiza răspunsul în TextView pentru debugging
+                // Parsăm răspunsul JSON
+                val suggestions = parseAutocompleteResponse(responseBody)
+
+                // Afișăm sugestiile în LogCat
+                Log.d("GoogleAutocomplete", "Sugestii: $suggestions")
+
+                // Poți vizualiza sugestiile și în TextView
                 runOnUiThread {
-                    resultText.text = "Răspunsul complet a fost înregistrat în LogCat"
+                    resultText.text = suggestions.joinToString(", ")
                 }
             } catch (e: IOException) {
-                // În caz de eroare
+                // În caz de eroare de rețea (nu poate accesa serverul)
                 Log.e("GoogleAutocomplete", "Eroare la cererea HTTP: ${e.message}")
+                e.printStackTrace()  // Detalii complete despre eroare
                 runOnUiThread {
-                    resultText.text = "Eroare la obținerea răspunsului."
+                    resultText.text = "Eroare la obținerea răspunsului. Verifică conexiunea la internet."
+                }
+            } catch (e: HttpResponseException) {
+                // Dacă cererea HTTP returnează un răspuns cu cod de eroare
+                Log.e("GoogleAutocomplete", "Eroare de răspuns HTTP: ${e.message}")
+                e.printStackTrace()  // Detalii complete despre eroare
+                runOnUiThread {
+                    resultText.text = "Eroare la serverul de autocomplete."
+                }
+            } catch (e: Exception) {
+                // Capturăm orice altă excepție neprevăzută
+                Log.e("GoogleAutocomplete", "Eroare neașteptată: ${e.message}")
+                e.printStackTrace()  // Detalii complete despre eroare
+                runOnUiThread {
+                    resultText.text = "A apărut o eroare neașteptată."
                 }
             }
         }.start()
     }
+
+    // Funcție pentru a parsa răspunsul JSON
+    private fun parseAutocompleteResponse(response: String?): List<String> {
+        return try {
+            // Folosim Gson pentru a deserializa răspunsul într-o listă generică (List<Any>)
+            val gson = Gson()
+            val responseList: List<Any> = gson.fromJson(response, object : TypeToken<List<Any>>() {}.type)
+
+            // Accesăm al doilea element din listă, care conține sugestiile autocomplete
+            val suggestions = responseList.getOrNull(1) as? List<String> ?: emptyList()
+
+            // Returnăm lista de sugestii
+            suggestions
+        } catch (e: Exception) {
+            Log.e("GoogleAutocomplete", "Eroare la parsarea JSON: ${e.message}")
+            emptyList() // Returnează o listă goală în caz de eroare
+        }
+    }
+
+
 }

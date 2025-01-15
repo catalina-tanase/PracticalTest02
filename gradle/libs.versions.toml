@@ -1,5 +1,6 @@
 [versions]
 agp = "8.7.0"
+gson = "2.8.8"
 httpclient = "4.5.13"
 httpclientVersion = "4.3.6"
 kotlin = "1.9.24"
@@ -14,6 +15,7 @@ constraintlayout = "2.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 httpclient = { module = "org.apache.httpcomponents:httpclient", version.ref = "httpclient" }
 httpclient-v436 = { module = "org.apache.httpcomponents:httpclient", version.ref = "httpclientVersion" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
